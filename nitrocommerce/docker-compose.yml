@@ -1,0 +1,65 @@
+version: "3.9"
+
+# NitroCommerce — High-Concurrency Flash Sale Engine
+# Brings up Postgres, Redis, the Go API, and the Next.js storefront.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: nitro-postgres
+    environment:
+      POSTGRES_USER: nitro
+      POSTGRES_PASSWORD: nitro
+      POSTGRES_DB: nitrocommerce
+    ports:
+      - "5432:5432"
+    volumes:
+      - nitro_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nitro -d nitrocommerce"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: nitro-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+    container_name: nitro-backend
+    environment:
+      POSTGRES_DSN: "host=postgres user=nitro password=nitro dbname=nitrocommerce port=5432 sslmode=disable TimeZone=UTC"
+      REDIS_ADDR: "redis:6379"
+      INITIAL_STOCK: "1000"
+      PORT: "8080"
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: nitro-frontend
+    environment:
+      # Browser-side calls go to the host-exposed backend port.
+      NEXT_PUBLIC_API_URL: "http://localhost:8080"
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+volumes:
+  nitro_pgdata:
